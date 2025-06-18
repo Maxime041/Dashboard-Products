@@ -1,8 +1,25 @@
 import type { Route } from "./+types/products";
 import { Layout } from "~/components/Layout";
-import { Link } from "react-router";
+import { Link, useLoaderData } from "react-router";
 import { Package, Edit, Trash2, Eye, Globe } from "lucide-react";
 import { Button } from "~/components/ui/Button";
+import { WooCommerceManager } from "~/lib/woocommerce";
+import { getSites } from "~/lib/sites";
+import { Product } from "~/types/product";
+import { useState } from "react";
+
+export async function loader(): Promise<{ products: Product[] }> {
+  const sites = getSites();
+  const manager = new WooCommerceManager(sites);
+  
+  try {
+    const products = await manager.getAllProducts();
+    return { products };
+  } catch (error) {
+    console.error('Erreur lors du chargement des produits:', error);
+    return { products: [] };
+  }
+}
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -12,42 +29,8 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Products() {
-  // Mock data - à remplacer par de vraies données
-  const products = [
-    {
-      id: '1',
-      name: 'Catamaran Leopard 40',
-      sku: 'CAT-LEO-40',
-      price: 450000,
-      status: 'publish',
-      stock: 'instock',
-      image: 'https://images.pexels.com/photos/1001682/pexels-photo-1001682.jpeg?auto=compress&cs=tinysrgb&w=400',
-      sites: ['Site Nautique', 'Marine Store', 'Boat Shop'],
-      lastSync: '2024-01-15 14:30'
-    },
-    {
-      id: '2',
-      name: 'Voilier Bavaria 46',
-      sku: 'VOIL-BAV-46',
-      price: 280000,
-      status: 'publish',
-      stock: 'instock',
-      image: 'https://images.pexels.com/photos/163236/luxury-yacht-boat-speed-water-163236.jpeg?auto=compress&cs=tinysrgb&w=400',
-      sites: ['Site Nautique', 'Boat Shop'],
-      lastSync: '2024-01-15 12:15'
-    },
-    {
-      id: '3',
-      name: 'Yacht Princess 60',
-      sku: 'YACHT-PRIN-60',
-      price: 850000,
-      status: 'draft',
-      stock: 'outofstock',
-      image: 'https://images.pexels.com/photos/1001682/pexels-photo-1001682.jpeg?auto=compress&cs=tinysrgb&w=400',
-      sites: [],
-      lastSync: null
-    }
-  ];
+  const { products } = useLoaderData<typeof loader>();
+  const [deletingProduct, setDeletingProduct] = useState<string | null>(null);
 
   const getStatusBadge = (status: string) => {
     const styles = {
@@ -91,6 +74,36 @@ export default function Products() {
     );
   };
 
+  const handleDeleteProduct = async (product: Product) => {
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer "${product.name}" de tous les sites ?`)) {
+      return;
+    }
+
+    setDeletingProduct(product.id);
+    
+    try {
+      const sites = getSites();
+      const manager = new WooCommerceManager(sites);
+      
+      const results = await manager.deleteProductFromAllSites(product.sku);
+      
+      if (results.success.length > 0) {
+        alert(`Produit supprimé avec succès de: ${results.success.join(', ')}`);
+        // Recharger la page pour mettre à jour la liste
+        window.location.reload();
+      }
+      
+      if (results.failed.length > 0) {
+        alert(`Erreur lors de la suppression sur: ${results.failed.join(', ')}`);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la suppression:', error);
+      alert('Erreur lors de la suppression du produit');
+    } finally {
+      setDeletingProduct(null);
+    }
+  };
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -99,7 +112,7 @@ export default function Products() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Produits</h1>
             <p className="mt-1 text-sm text-gray-500">
-              Gérez tous vos produits WooCommerce
+              Gérez tous vos produits WooCommerce ({products.length} produits)
             </p>
           </div>
           <Link to="/products/new">
@@ -110,122 +123,127 @@ export default function Products() {
           </Link>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex flex-wrap gap-4">
-            <select className="rounded-md border-gray-300 text-sm">
-              <option>Tous les statuts</option>
-              <option>Publié</option>
-              <option>Brouillon</option>
-              <option>Privé</option>
-            </select>
-            <select className="rounded-md border-gray-300 text-sm">
-              <option>Tous les stocks</option>
-              <option>En stock</option>
-              <option>Rupture</option>
-              <option>Sur commande</option>
-            </select>
-            <input
-              type="text"
-              placeholder="Rechercher un produit..."
-              className="rounded-md border-gray-300 text-sm flex-1 min-w-64"
-            />
+        {products.length === 0 ? (
+          <div className="text-center py-12">
+            <Package className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun produit</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Aucun produit trouvé sur vos sites WooCommerce.
+            </p>
+            <div className="mt-6">
+              <Link to="/products/new">
+                <Button>
+                  <Package className="h-4 w-4 mr-2" />
+                  Créer votre premier produit
+                </Button>
+              </Link>
+            </div>
           </div>
-        </div>
-
-        {/* Products Table */}
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Produit
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  SKU
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Prix
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Statut
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Stock
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Sites
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Dernière sync
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {products.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-12 w-12">
-                        <img
-                          className="h-12 w-12 rounded-lg object-cover"
-                          src={product.image}
-                          alt={product.name}
-                        />
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {product.name}
+        ) : (
+          /* Products Table */
+          <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Produit
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    SKU
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Prix
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Statut
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Stock
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Sites
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {products.map((product) => (
+                  <tr key={`${product.id}-${product.siteId}`} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-12 w-12">
+                          {product.featuredImage ? (
+                            <img
+                              className="h-12 w-12 rounded-lg object-cover"
+                              src={product.featuredImage}
+                              alt={product.name}
+                            />
+                          ) : (
+                            <div className="h-12 w-12 rounded-lg bg-gray-200 flex items-center justify-center">
+                              <Package className="h-6 w-6 text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {product.name}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {product.sku}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {product.price.toLocaleString('fr-FR')} €
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {getStatusBadge(product.status)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {getStockBadge(product.stock)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center space-x-1">
-                      <Globe className="h-4 w-4 text-gray-400" />
-                      <span className="text-sm text-gray-500">
-                        {product.sites.length}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {product.lastSync || 'Jamais'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center justify-end space-x-2">
-                      <Button variant="ghost" size="sm">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Link to={`/products/${product.id}/edit`}>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {product.sku || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {product.price.toLocaleString('fr-FR')} €
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getStatusBadge(product.status)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getStockBadge(product.stockStatus)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-1">
+                        <Globe className="h-4 w-4 text-gray-400" />
+                        <span className="text-sm text-gray-500">
+                          {product.sites?.length || 1}
+                        </span>
+                        {product.sites && (
+                          <div className="text-xs text-gray-400">
+                            ({product.sites.join(', ')})
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end space-x-2">
                         <Button variant="ghost" size="sm">
-                          <Edit className="h-4 w-4" />
+                          <Eye className="h-4 w-4" />
                         </Button>
-                      </Link>
-                      <Button variant="ghost" size="sm">
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                        <Link to={`/products/${product.id}/edit?siteId=${product.siteId}`}>
+                          <Button variant="ghost" size="sm">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleDeleteProduct(product)}
+                          disabled={deletingProduct === product.id}
+                        >
+                          <Trash2 className={`h-4 w-4 ${deletingProduct === product.id ? 'animate-spin' : 'text-red-500'}`} />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </Layout>
   );

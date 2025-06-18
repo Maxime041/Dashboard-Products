@@ -4,7 +4,53 @@ import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { useState } from "react";
 import { Save, ArrowLeft, TestTube, CheckCircle, XCircle } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useActionData } from "react-router";
+import { addSite } from "~/lib/sites";
+import { WooCommerceAPI } from "~/lib/woocommerce";
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  
+  const siteData = {
+    name: formData.get('name') as string,
+    url: formData.get('url') as string,
+    consumerKey: formData.get('consumerKey') as string,
+    consumerSecret: formData.get('consumerSecret') as string,
+    active: true,
+  };
+
+  try {
+    // Test de connexion avant d'ajouter le site
+    const api = new WooCommerceAPI({
+      id: 'test',
+      ...siteData,
+    });
+    
+    const isConnected = await api.testConnection();
+    
+    if (!isConnected) {
+      return {
+        success: false,
+        message: 'Impossible de se connecter au site. Vérifiez vos paramètres.',
+      };
+    }
+
+    const newSite = addSite(siteData);
+    
+    return {
+      success: true,
+      message: 'Site ajouté avec succès !',
+      site: newSite,
+    };
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout du site:', error);
+    return {
+      success: false,
+      message: 'Erreur lors de l\'ajout du site',
+      error: error instanceof Error ? error.message : 'Erreur inconnue',
+    };
+  }
+}
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -14,6 +60,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function NewSite() {
+  const actionData = useActionData<typeof action>();
   const [formData, setFormData] = useState({
     name: '',
     url: '',
@@ -29,28 +76,53 @@ export default function NewSite() {
     e.preventDefault();
     setLoading(true);
     
-    // Simulation d'une sauvegarde
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    const form = new FormData();
+    Object.entries(formData).forEach(([key, value]) => {
+      form.append(key, value);
+    });
     
-    console.log('Données du site:', formData);
-    setLoading(false);
-    
-    // Redirection vers la liste des sites
-    // navigate('/sites');
+    try {
+      await fetch('/sites/new', {
+        method: 'POST',
+        body: form,
+      });
+    } catch (error) {
+      console.error('Erreur lors de la soumission:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleTestConnection = async () => {
     setTesting(true);
     setTestResult(null);
     
-    // Simulation d'un test de connexion
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    // Simulation d'un résultat aléatoire
-    const success = Math.random() > 0.3;
-    setTestResult(success ? 'success' : 'error');
-    setTesting(false);
+    try {
+      const api = new WooCommerceAPI({
+        id: 'test',
+        name: formData.name,
+        url: formData.url,
+        consumerKey: formData.consumerKey,
+        consumerSecret: formData.consumerSecret,
+        active: true,
+      });
+      
+      const isConnected = await api.testConnection();
+      setTestResult(isConnected ? 'success' : 'error');
+    } catch (error) {
+      console.error('Erreur lors du test de connexion:', error);
+      setTestResult('error');
+    } finally {
+      setTesting(false);
+    }
   };
+
+  // Redirection après succès
+  if (actionData?.success) {
+    setTimeout(() => {
+      window.location.href = '/sites';
+    }, 2000);
+  }
 
   return (
     <Layout>
@@ -72,6 +144,36 @@ export default function NewSite() {
             </div>
           </div>
         </div>
+
+        {/* Messages de retour */}
+        {actionData?.success && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex">
+              <CheckCircle className="h-5 w-5 text-green-400" />
+              <div className="ml-3">
+                <p className="text-sm font-medium text-green-800">
+                  {actionData.message}
+                </p>
+                <p className="text-sm text-green-700 mt-1">
+                  Redirection vers la liste des sites...
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {actionData?.success === false && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <XCircle className="h-5 w-5 text-red-400" />
+              <div className="ml-3">
+                <p className="text-sm font-medium text-red-800">
+                  {actionData.message}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Instructions */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

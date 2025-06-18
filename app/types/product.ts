@@ -27,6 +27,19 @@ export interface Product {
   downloadable: boolean;
   createdAt: string;
   updatedAt: string;
+  attributes?: ProductAttribute[];
+  siteId?: string;
+  siteName?: string;
+  sites?: string[];
+}
+
+export interface ProductAttribute {
+  id: number;
+  name: string;
+  position: number;
+  visible: boolean;
+  variation: boolean;
+  options: string[];
 }
 
 export interface WooCommerceSite {
@@ -64,4 +77,12 @@ export interface ProductFormData {
   virtual: boolean;
   downloadable: boolean;
   selectedSites: string[];
+  attributes?: ProductAttribute[];
+}
+
+export interface SiteStats {
+  totalSites: number;
+  connectedSites: number;
+  errorSites: number;
+  totalProducts: number;
 }

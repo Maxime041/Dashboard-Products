@@ -5,9 +5,37 @@ import { Input } from "~/components/ui/Input";
 import { Textarea } from "~/components/ui/Textarea";
 import { Select } from "~/components/ui/Select";
 import { ImageUpload } from "~/components/ImageUpload";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Save, ArrowLeft, Globe } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useActionData } from "react-router";
+import { WooCommerceManager } from "~/lib/woocommerce";
+import { getSites } from "~/lib/sites";
+import { ProductFormData } from "~/types/product";
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const productData = JSON.parse(formData.get('productData') as string) as ProductFormData;
+  
+  try {
+    const sites = getSites();
+    const manager = new WooCommerceManager(sites);
+    
+    const createdProducts = await manager.createProduct(productData, productData.selectedSites);
+    
+    return {
+      success: true,
+      message: `Produit créé avec succès sur ${createdProducts.length} site(s)`,
+      products: createdProducts,
+    };
+  } catch (error) {
+    console.error('Erreur lors de la création du produit:', error);
+    return {
+      success: false,
+      message: 'Erreur lors de la création du produit',
+      error: error instanceof Error ? error.message : 'Erreur inconnue',
+    };
+  }
+}
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -17,53 +45,64 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function NewProduct() {
-  const [formData, setFormData] = useState({
+  const actionData = useActionData<typeof action>();
+  const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     description: '',
     shortDescription: '',
     sku: '',
-    regularPrice: '',
-    salePrice: '',
+    regularPrice: 0,
+    salePrice: undefined,
     manageStock: false,
-    stockQuantity: '',
+    stockQuantity: undefined,
     stockStatus: 'instock',
-    weight: '',
-    length: '',
-    width: '',
-    height: '',
-    categories: [] as string[],
-    tags: [] as string[],
-    images: [] as string[],
+    weight: undefined,
+    dimensions: {
+      length: undefined,
+      width: undefined,
+      height: undefined,
+    },
+    categories: ['Highlights', 'St-Tropez', 'Monaco - Nice', 'Corse', 'Antibes - Cannes'],
+    tags: [],
+    images: [],
     status: 'draft',
     catalogVisibility: 'visible',
     featured: false,
     virtual: false,
     downloadable: false,
-    selectedSites: [] as string[]
+    selectedSites: [],
   });
 
   const [loading, setLoading] = useState(false);
+  const [availableSites, setAvailableSites] = useState(getSites());
 
-  // Mock data pour les sites
-  const availableSites = [
-    { id: '1', name: 'Site Nautique', url: 'https://site-nautique.com' },
-    { id: '2', name: 'Marine Store', url: 'https://marine-store.fr' },
-    { id: '3', name: 'Boat Shop', url: 'https://boat-shop.com' },
-    { id: '4', name: 'Nautique Pro', url: 'https://nautique-pro.fr' }
-  ];
+  useEffect(() => {
+    if (actionData?.success) {
+      alert(actionData.message);
+      // Optionnel: rediriger vers la liste des produits
+      // window.location.href = '/products';
+    } else if (actionData?.success === false) {
+      alert(`Erreur: ${actionData.message}`);
+    }
+  }, [actionData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     
-    // Simulation d'une sauvegarde
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    const form = new FormData();
+    form.append('productData', JSON.stringify(formData));
     
-    console.log('Données du produit:', formData);
-    setLoading(false);
-    
-    // Redirection vers la liste des produits
-    // navigate('/products');
+    try {
+      await fetch('/products/new', {
+        method: 'POST',
+        body: form,
+      });
+    } catch (error) {
+      console.error('Erreur lors de la soumission:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSiteToggle = (siteId: string) => {
@@ -72,6 +111,26 @@ export default function NewProduct() {
       selectedSites: prev.selectedSites.includes(siteId)
         ? prev.selectedSites.filter(id => id !== siteId)
         : [...prev.selectedSites, siteId]
+    }));
+  };
+
+  // Template de description avec shortcode pour les bateaux
+  const handleUseBoatTemplate = () => {
+    const boatDescription = `[vc_row type="in_container" full_screen_row_position="middle" column_margin="default" column_direction="default" column_direction_tablet="default" column_direction_phone="default" scene_position="center" text_color="#fff" text_align="left" row_border_radius="none" row_border_radius_applies="bg" overflow="visible" overlay_strength="0.9" gradient_direction="left_to_right" shape_divider_position="bottom" bg_image_animation="none"][vc_column column_padding="padding-1-percent" column_padding_tablet="inherit" column_padding_phone="inherit" column_padding_position="all" column_element_spacing="default" background_color_opacity="1" background_hover_color_opacity="1" column_shadow="none" column_border_radius="none" column_link_target="_self" column_position="default" advanced_gradient_angle="0" gradient_direction="left_to_right" overlay_strength="0.3" width="1/1" tablet_width_inherit="default" tablet_text_alignment="default" phone_text_alignment="default" animation_type="default" bg_image_animation="none" border_type="simple" column_border_width="1px" column_border_color="#0a0a0a" column_border_style="solid" enable_border_animation="true" gradient_type="default"][nectar_icon_list animate="true" color="default" direction="vertical" icon_size="small" icon_style="border"][nectar_icon_list_item icon_type="icon" text_full_html="html" title="List Item" id="1713860757178-3" tab_id="1713860757178-5" icon_fontawesome="fa fa-anchor"]<strong>Constructeur:</strong> Leopard (Arno)
+
+<strong>Longueur:</strong> 26.96 m | <strong>Largeur:</strong> 6.05 m
+
+<strong>Cabines: </strong>4[/nectar_icon_list_item][nectar_icon_list_item icon_type="icon" text_full_html="html" title="List Item" id="1713860757192-8" tab_id="1713860757192-10" icon_fontawesome="fa fa-users"]<strong>Passagers en navigation:</strong> 12
+
+<strong>Couchage:</strong> 10 personnes
+
+<strong>Équipage:</strong> 3[/nectar_icon_list_item][nectar_icon_list_item icon_type="icon" text_full_html="html" title="List Item" id="1713860757197-0" tab_id="1713860757197-1" icon_fontawesome="fa fa-cogs"]<strong>Vitesse de croisière:</strong> 22 noeuds
+
+<strong>Consommation: </strong>450 L/H[/nectar_icon_list_item][/nectar_icon_list][/vc_column][/vc_row]`;
+
+    setFormData(prev => ({
+      ...prev,
+      description: boatDescription
     }));
   };
 
@@ -95,7 +154,11 @@ export default function NewProduct() {
             </div>
           </div>
           <div className="flex space-x-3">
-            <Button variant="outline" type="button">
+            <Button 
+              variant="outline" 
+              type="button"
+              onClick={() => setFormData(prev => ({ ...prev, status: 'draft' }))}
+            >
               Enregistrer comme brouillon
             </Button>
             <Button type="submit" form="product-form" loading={loading}>
@@ -123,13 +186,27 @@ export default function NewProduct() {
                     required
                   />
                   
-                  <Textarea
-                    label="Description"
-                    value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Description détaillée du produit..."
-                    rows={6}
-                  />
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Description
+                      </label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleUseBoatTemplate}
+                      >
+                        Template Bateau
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Description détaillée du produit..."
+                      rows={8}
+                    />
+                  </div>
                   
                   <Textarea
                     label="Description courte"
@@ -164,8 +241,8 @@ export default function NewProduct() {
                   <Input
                     label="Prix régulier (€) *"
                     type="number"
-                    value={formData.regularPrice}
-                    onChange={(e) => setFormData(prev => ({ ...prev, regularPrice: e.target.value }))}
+                    value={formData.regularPrice.toString()}
+                    onChange={(e) => setFormData(prev => ({ ...prev, regularPrice: parseFloat(e.target.value) || 0 }))}
                     placeholder="0.00"
                     required
                   />
@@ -173,8 +250,8 @@ export default function NewProduct() {
                   <Input
                     label="Prix de vente (€)"
                     type="number"
-                    value={formData.salePrice}
-                    onChange={(e) => setFormData(prev => ({ ...prev, salePrice: e.target.value }))}
+                    value={formData.salePrice?.toString() || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, salePrice: e.target.value ? parseFloat(e.target.value) : undefined }))}
                     placeholder="0.00"
                   />
                   
@@ -216,8 +293,8 @@ export default function NewProduct() {
                     <Input
                       label="Quantité en stock"
                       type="number"
-                      value={formData.stockQuantity}
-                      onChange={(e) => setFormData(prev => ({ ...prev, stockQuantity: e.target.value }))}
+                      value={formData.stockQuantity?.toString() || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, stockQuantity: e.target.value ? parseInt(e.target.value) : undefined }))}
                       placeholder="0"
                     />
                   </div>
@@ -233,8 +310,8 @@ export default function NewProduct() {
                   <Input
                     label="Poids (kg)"
                     type="number"
-                    value={formData.weight}
-                    onChange={(e) => setFormData(prev => ({ ...prev, weight: e.target.value }))}
+                    value={formData.weight?.toString() || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, weight: e.target.value ? parseFloat(e.target.value) : undefined }))}
                     placeholder="0.00"
                   />
                   
@@ -244,22 +321,40 @@ export default function NewProduct() {
                       <Input
                         label="Longueur"
                         type="number"
-                        value={formData.length}
-                        onChange={(e) => setFormData(prev => ({ ...prev, length: e.target.value }))}
+                        value={formData.dimensions.length?.toString() || ''}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          dimensions: { 
+                            ...prev.dimensions, 
+                            length: e.target.value ? parseFloat(e.target.value) : undefined 
+                          }
+                        }))}
                         placeholder="0.00"
                       />
                       <Input
                         label="Largeur"
                         type="number"
-                        value={formData.width}
-                        onChange={(e) => setFormData(prev => ({ ...prev, width: e.target.value }))}
+                        value={formData.dimensions.width?.toString() || ''}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          dimensions: { 
+                            ...prev.dimensions, 
+                            width: e.target.value ? parseFloat(e.target.value) : undefined 
+                          }
+                        }))}
                         placeholder="0.00"
                       />
                       <Input
                         label="Hauteur"
                         type="number"
-                        value={formData.height}
-                        onChange={(e) => setFormData(prev => ({ ...prev, height: e.target.value }))}
+                        value={formData.dimensions.height?.toString() || ''}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          dimensions: { 
+                            ...prev.dimensions, 
+                            height: e.target.value ? parseFloat(e.target.value) : undefined 
+                          }
+                        }))}
                         placeholder="0.00"
                       />
                     </div>
@@ -383,9 +478,17 @@ export default function NewProduct() {
                     </label>
                     <input
                       type="text"
+                      value={formData.categories.join(', ')}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        categories: e.target.value.split(',').map(c => c.trim()).filter(c => c)
+                      }))}
                       placeholder="Séparez par des virgules"
                       className="w-full rounded-md border-gray-300 text-sm"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Catégories par défaut: Highlights, St-Tropez, Monaco - Nice, Corse, Antibes - Cannes
+                    </p>
                   </div>
                   
                   <div>
@@ -394,6 +497,11 @@ export default function NewProduct() {
                     </label>
                     <input
                       type="text"
+                      value={formData.tags.join(', ')}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        tags: e.target.value.split(',').map(t => t.trim()).filter(t => t)
+                      }))}
                       placeholder="Séparez par des virgules"
                       className="w-full rounded-md border-gray-300 text-sm"
                     />

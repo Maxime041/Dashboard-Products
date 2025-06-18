@@ -1,8 +1,48 @@
 import type { Route } from "./+types/sites";
 import { Layout } from "~/components/Layout";
-import { Link } from "react-router";
+import { Link, useLoaderData } from "react-router";
 import { Globe, Plus, Edit, Trash2, CheckCircle, XCircle, RefreshCw } from "lucide-react";
 import { Button } from "~/components/ui/Button";
+import { getSites } from "~/lib/sites";
+import { WooCommerceManager } from "~/lib/woocommerce";
+import { WooCommerceSite } from "~/types/product";
+
+export async function loader(): Promise<{ sites: (WooCommerceSite & { status: string; productsCount: number })[] }> {
+  const sites = getSites();
+  const sitesWithStatus = [];
+  
+  for (const site of sites) {
+    let status = 'disconnected';
+    let productsCount = 0;
+    
+    try {
+      const manager = new WooCommerceManager([site]);
+      const isConnected = await manager.testSiteConnection(site);
+      
+      if (isConnected) {
+        status = 'connected';
+        try {
+          const products = await manager.getAllProducts();
+          productsCount = products.length;
+        } catch (error) {
+          console.error(`Erreur lors du comptage des produits pour ${site.name}:`, error);
+        }
+      } else {
+        status = 'error';
+      }
+    } catch (error) {
+      status = 'error';
+    }
+    
+    sitesWithStatus.push({
+      ...site,
+      status,
+      productsCount,
+    });
+  }
+  
+  return { sites: sitesWithStatus };
+}
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -12,45 +52,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Sites() {
-  // Mock data - à remplacer par de vraies données
-  const sites = [
-    {
-      id: '1',
-      name: 'Site Nautique',
-      url: 'https://site-nautique.com',
-      active: true,
-      lastSync: '2024-01-15 14:30',
-      productsCount: 45,
-      status: 'connected'
-    },
-    {
-      id: '2',
-      name: 'Marine Store',
-      url: 'https://marine-store.fr',
-      active: true,
-      lastSync: '2024-01-15 12:15',
-      productsCount: 32,
-      status: 'connected'
-    },
-    {
-      id: '3',
-      name: 'Boat Shop',
-      url: 'https://boat-shop.com',
-      active: false,
-      lastSync: '2024-01-10 09:45',
-      productsCount: 28,
-      status: 'error'
-    },
-    {
-      id: '4',
-      name: 'Nautique Pro',
-      url: 'https://nautique-pro.fr',
-      active: true,
-      lastSync: '2024-01-15 16:20',
-      productsCount: 67,
-      status: 'connected'
-    }
-  ];
+  const { sites } = useLoaderData<typeof loader>();
 
   const getStatusIcon = (status: string, active: boolean) => {
     if (!active) {
@@ -84,15 +86,9 @@ export default function Sites() {
     }
   };
 
-  const handleSync = (siteId: string) => {
-    console.log('Synchronisation du site:', siteId);
-    // Logique de synchronisation
-  };
-
-  const handleToggleActive = (siteId: string) => {
-    console.log('Basculer l\'état actif du site:', siteId);
-    // Logique pour activer/désactiver
-  };
+  const connectedSites = sites.filter(s => s.active && s.status === 'connected').length;
+  const errorSites = sites.filter(s => s.status === 'error').length;
+  const totalProducts = sites.reduce((acc, site) => acc + site.productsCount, 0);
 
   return (
     <Layout>
@@ -134,9 +130,7 @@ export default function Sites() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Connectés</p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {sites.filter(s => s.active && s.status === 'connected').length}
-                </p>
+                <p className="text-2xl font-semibold text-gray-900">{connectedSites}</p>
               </div>
             </div>
           </div>
@@ -148,9 +142,7 @@ export default function Sites() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Erreurs</p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {sites.filter(s => s.status === 'error').length}
-                </p>
+                <p className="text-2xl font-semibold text-gray-900">{errorSites}</p>
               </div>
             </div>
           </div>
@@ -161,87 +153,99 @@ export default function Sites() {
                 <RefreshCw className="h-8 w-8 text-blue-500" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Produits sync</p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {sites.reduce((acc, site) => acc + site.productsCount, 0)}
-                </p>
+                <p className="text-sm font-medium text-gray-500">Produits total</p>
+                <p className="text-2xl font-semibold text-gray-900">{totalProducts}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Sites List */}
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900">Sites connectés</h2>
+        {sites.length === 0 ? (
+          <div className="text-center py-12">
+            <Globe className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun site configuré</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Commencez par ajouter votre premier site WooCommerce.
+            </p>
+            <div className="mt-6">
+              <Link to="/sites/new">
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Ajouter votre premier site
+                </Button>
+              </Link>
+            </div>
           </div>
-          
-          <div className="divide-y divide-gray-200">
-            {sites.map((site) => (
-              <div key={site.id} className="p-6 hover:bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex-shrink-0">
-                      {getStatusIcon(site.status, site.active)}
-                    </div>
-                    
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
-                        <h3 className="text-lg font-medium text-gray-900">
-                          {site.name}
-                        </h3>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          site.active && site.status === 'connected'
-                            ? 'bg-green-100 text-green-800'
-                            : site.status === 'error'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {getStatusText(site.status, site.active)}
-                        </span>
+        ) : (
+          /* Sites List */
+          <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-medium text-gray-900">Sites connectés</h2>
+            </div>
+            
+            <div className="divide-y divide-gray-200">
+              {sites.map((site) => (
+                <div key={site.id} className="p-6 hover:bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex-shrink-0">
+                        {getStatusIcon(site.status, site.active)}
                       </div>
                       
-                      <div className="mt-1 flex items-center space-x-4 text-sm text-gray-500">
-                        <span>{site.url}</span>
-                        <span>•</span>
-                        <span>{site.productsCount} produits</span>
-                        <span>•</span>
-                        <span>Dernière sync: {site.lastSync}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2">
+                          <h3 className="text-lg font-medium text-gray-900">
+                            {site.name}
+                          </h3>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            site.active && site.status === 'connected'
+                              ? 'bg-green-100 text-green-800'
+                              : site.status === 'error'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {getStatusText(site.status, site.active)}
+                          </span>
+                        </div>
+                        
+                        <div className="mt-1 flex items-center space-x-4 text-sm text-gray-500">
+                          <span>{site.url}</span>
+                          <span>•</span>
+                          <span>{site.productsCount} produits</span>
+                          {site.lastSync && (
+                            <>
+                              <span>•</span>
+                              <span>Dernière sync: {site.lastSync}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleSync(site.id)}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-1" />
-                      Sync
-                    </Button>
                     
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleToggleActive(site.id)}
-                    >
-                      {site.active ? 'Désactiver' : 'Activer'}
-                    </Button>
-                    
-                    <Button variant="ghost" size="sm">
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    
-                    <Button variant="ghost" size="sm">
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.location.reload()}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-1" />
+                        Tester
+                      </Button>
+                      
+                      <Button variant="ghost" size="sm">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      
+                      <Button variant="ghost" size="sm">
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </Layout>
   );

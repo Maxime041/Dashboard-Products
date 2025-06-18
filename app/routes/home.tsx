@@ -1,6 +1,49 @@
 import type { Route } from "./+types/home";
 import { Layout } from "~/components/Layout";
-import { Package, Globe, TrendingUp, Users } from "lucide-react";
+import { Package, Globe, TrendingUp, AlertCircle } from "lucide-react";
+import { useLoaderData } from "react-router";
+import { WooCommerceManager } from "~/lib/woocommerce";
+import { getSites } from "~/lib/sites";
+import { SiteStats } from "~/types/product";
+
+export async function loader(): Promise<{ stats: SiteStats }> {
+  const sites = getSites();
+  const manager = new WooCommerceManager(sites);
+  
+  let totalProducts = 0;
+  let connectedSites = 0;
+  let errorSites = 0;
+
+  // Test de connexion pour chaque site
+  for (const site of sites) {
+    try {
+      const isConnected = await manager.testSiteConnection(site);
+      if (isConnected) {
+        connectedSites++;
+        // Compter les produits pour les sites connectés
+        try {
+          const products = await manager.getAllProducts();
+          totalProducts = products.length;
+        } catch (error) {
+          console.error('Erreur lors du comptage des produits:', error);
+        }
+      } else {
+        errorSites++;
+      }
+    } catch (error) {
+      errorSites++;
+    }
+  }
+
+  const stats: SiteStats = {
+    totalSites: sites.length,
+    connectedSites,
+    errorSites,
+    totalProducts,
+  };
+
+  return { stats };
+}
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -10,34 +53,36 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Home() {
-  const stats = [
+  const { stats } = useLoaderData<typeof loader>();
+
+  const statCards = [
     {
       name: 'Produits totaux',
-      value: '124',
+      value: stats.totalProducts.toString(),
       icon: Package,
-      change: '+12%',
-      changeType: 'positive' as const,
+      change: '',
+      changeType: 'neutral' as const,
     },
     {
       name: 'Sites connectés',
-      value: '8',
+      value: stats.connectedSites.toString(),
       icon: Globe,
-      change: '+2',
-      changeType: 'positive' as const,
+      change: `/${stats.totalSites}`,
+      changeType: stats.connectedSites === stats.totalSites ? 'positive' : 'neutral' as const,
     },
     {
-      name: 'Synchronisations',
-      value: '1,429',
+      name: 'Sites actifs',
+      value: stats.totalSites.toString(),
       icon: TrendingUp,
-      change: '+5.4%',
+      change: '',
       changeType: 'positive' as const,
     },
     {
       name: 'Erreurs',
-      value: '3',
-      icon: Users,
-      change: '-2',
-      changeType: 'negative' as const,
+      value: stats.errorSites.toString(),
+      icon: AlertCircle,
+      change: '',
+      changeType: stats.errorSites > 0 ? 'negative' : 'positive' as const,
     },
   ];
 
@@ -54,7 +99,7 @@ export default function Home() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat) => {
+          {statCards.map((stat) => {
             const Icon = stat.icon;
             return (
               <div
@@ -73,91 +118,63 @@ export default function Home() {
                   <p className="text-2xl font-semibold text-gray-900">
                     {stat.value}
                   </p>
-                  <p
-                    className={`ml-2 flex items-baseline text-sm font-semibold ${
-                      stat.changeType === 'positive'
-                        ? 'text-green-600'
-                        : 'text-red-600'
-                    }`}
-                  >
-                    {stat.change}
-                  </p>
+                  {stat.change && (
+                    <p
+                      className={`ml-2 flex items-baseline text-sm font-semibold ${
+                        stat.changeType === 'positive'
+                          ? 'text-green-600'
+                          : stat.changeType === 'negative'
+                          ? 'text-red-600'
+                          : 'text-gray-600'
+                      }`}
+                    >
+                      {stat.change}
+                    </p>
+                  )}
                 </dd>
               </div>
             );
           })}
         </div>
 
-        {/* Recent Activity */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">
-              Activité récente
-            </h3>
-            <div className="mt-5">
-              <div className="flow-root">
-                <ul className="-mb-8">
-                  {[
-                    {
-                      id: 1,
-                      content: 'Produit "Catamaran Leopard 40" synchronisé sur 3 sites',
-                      time: 'Il y a 2 heures',
-                      type: 'success',
-                    },
-                    {
-                      id: 2,
-                      content: 'Nouveau site "Boutique Marine" ajouté',
-                      time: 'Il y a 4 heures',
-                      type: 'info',
-                    },
-                    {
-                      id: 3,
-                      content: 'Erreur de synchronisation sur "Site Nautique Pro"',
-                      time: 'Il y a 6 heures',
-                      type: 'error',
-                    },
-                  ].map((item, itemIdx) => (
-                    <li key={item.id}>
-                      <div className="relative pb-8">
-                        {itemIdx !== 2 ? (
-                          <span
-                            className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                        <div className="relative flex space-x-3">
-                          <div>
-                            <span
-                              className={`h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white ${
-                                item.type === 'success'
-                                  ? 'bg-green-500'
-                                  : item.type === 'error'
-                                  ? 'bg-red-500'
-                                  : 'bg-blue-500'
-                              }`}
-                            >
-                              <Package className="h-4 w-4 text-white" />
-                            </span>
-                          </div>
-                          <div className="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
-                            <div>
-                              <p className="text-sm text-gray-500">
-                                {item.content}
-                              </p>
-                            </div>
-                            <div className="text-right text-sm whitespace-nowrap text-gray-500">
-                              {item.time}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+        {/* Info sur la configuration */}
+        {stats.totalSites === 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex">
+              <AlertCircle className="h-5 w-5 text-yellow-400" />
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-yellow-800">
+                  Aucun site configuré
+                </h3>
+                <div className="mt-2 text-sm text-yellow-700">
+                  <p>
+                    Vous devez configurer au moins un site WooCommerce pour commencer.
+                    Allez dans la section "Sites WooCommerce" pour ajouter vos sites.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {stats.errorSites > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <AlertCircle className="h-5 w-5 text-red-400" />
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">
+                  Erreurs de connexion
+                </h3>
+                <div className="mt-2 text-sm text-red-700">
+                  <p>
+                    {stats.errorSites} site(s) ne peuvent pas être contactés. 
+                    Vérifiez la configuration de vos clés API dans la section "Sites WooCommerce".
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
