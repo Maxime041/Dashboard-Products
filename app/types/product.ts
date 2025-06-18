@@ -31,15 +31,35 @@ export interface Product {
   siteId?: string;
   siteName?: string;
   sites?: string[];
+  // Nouveaux champs basés sur l'exemple CSV
+  menuOrder?: number;
+  totalSales?: number;
+  globalUniqueId?: string;
+  productUrl?: string;
+  buttonText?: string;
+  downloadableFiles?: string;
+  taxClass?: string;
+  taxStatus?: string;
+  backorders?: string;
+  soldIndividually?: boolean;
+  lowStockAmount?: number;
+  purchaseNote?: string;
+  salePriceDatesFrom?: string;
+  salePriceDatesTo?: string;
+  downloadLimit?: number;
+  downloadExpiry?: number;
+  upsellIds?: string[];
+  crosssellIds?: string[];
 }
 
 export interface ProductAttribute {
-  id: number;
+  id?: number;
   name: string;
-  position: number;
-  visible: boolean;
-  variation: boolean;
+  position?: number;
+  visible?: boolean;
+  variation?: boolean;
   options: string[];
+  slug?: string;
 }
 
 export interface WooCommerceSite {
@@ -78,6 +98,16 @@ export interface ProductFormData {
   downloadable: boolean;
   selectedSites: string[];
   attributes?: ProductAttribute[];
+  // Nouveaux champs
+  menuOrder?: number;
+  taxClass?: string;
+  taxStatus?: string;
+  backorders?: string;
+  soldIndividually?: boolean;
+  lowStockAmount?: number;
+  purchaseNote?: string;
+  productUrl?: string;
+  buttonText?: string;
 }
 
 export interface SiteStats {

@@ -2,15 +2,25 @@ import { WooCommerceSite } from '~/types/product';
 
 // Configuration des sites - à terme, cela pourrait venir d'un fichier de config ou d'une interface admin
 export const SITES_CONFIG: WooCommerceSite[] = [
-  // Exemple de configuration - à adapter selon vos sites
-  // {
-  //   id: '1',
-  //   name: 'Site Nautique',
-  //   url: 'https://votre-site.com',
-  //   consumerKey: 'ck_...',
-  //   consumerSecret: 'cs_...',
-  //   active: true,
-  // }
+  // Décommentez et configurez vos sites réels :
+  /*
+  {
+    id: '1',
+    name: 'Site Nautique Principal',
+    url: 'https://myboattripriviera.com',
+    consumerKey: 'ck_...',
+    consumerSecret: 'cs_...',
+    active: true,
+  },
+  {
+    id: '2',
+    name: 'Site Nautique Secondaire',
+    url: 'https://autre-site.com',
+    consumerKey: 'ck_...',
+    consumerSecret: 'cs_...',
+    active: true,
+  }
+  */
 ];
 
 export function getSites(): WooCommerceSite[] {
